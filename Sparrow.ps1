@@ -147,6 +147,16 @@ Function Get-UALData {
 Function Get-AzureDomains{
 
     [cmdletbinding()]Param()
+
+    $GovCloudPrompt = Read-Host -Prompt 'Is your Azure environment in Commercial or Government? (Y/N): '
+    #Connect to AzureAD or Azure Government based on the prompt | You're in USGOV Azure if you go to portal.azure.us 
+    if($GovCloudPrompt -eq 'Y')
+    {
+        Connect-AzureAD -AzureEnvironmentName "AzureUSGovernment"
+    }
+    else {
+        Connect-AzureAD 
+    }
     
     $DomainData = Get-AzureADDomain
     $DomainArr = @()
@@ -177,6 +187,16 @@ Function Get-AzureSPAppRoles{
 
     #Connect to your tenant's AzureAD environment
     #Connect to AzureAD or Azure Government based on the prompt
+    $GovCloudPrompt = Read-Host -Prompt 'Is your Azure environment in Commercial or Government? (Y/N): '
+
+    if($GovCloudPrompt -eq 'Y')
+    {
+        Connect-AzureAD -AzureEnvironmentName "AzureUSGovernment"
+    }
+    else {
+        Connect-AzureAD 
+    }
+
     #Retrieve all service principals that are applications
     $SPArr = Get-AzureADServicePrincipal -All $true | Where-Object {$_.ServicePrincipalType -eq "Application"}
 
@@ -366,16 +386,6 @@ Function Export-UALData {
 
 #Function calls, if you do not need a particular check, you can comment it out below with #
 Check-PSModules -Verbose
-Get-UALData -Verbose
-# Login to Azure/AzureGovernment
-$GovCloudPrompt = Read-Host -Prompt 'Is your Azure environment in Commercial or Government? (Y/N): '
-if($GovCloudPrompt -eq 'Y')
-{
-    Connect-AzureAD -AzureEnvironmentName "AzureUSGovernment"
-}
-else {
-    Connect-AzureAD 
-}
-
+#Get-UALData -Verbose
 Get-AzureDomains -Verbose
 Get-AzureSPAppRoles -Verbose

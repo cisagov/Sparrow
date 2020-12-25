@@ -386,6 +386,6 @@ Function Export-UALData {
 
 #Function calls, if you do not need a particular check, you can comment it out below with #
 Check-PSModules -Verbose
-#Get-UALData -Verbose
+Get-UALData -Verbose
 Get-AzureDomains -Verbose
 Get-AzureSPAppRoles -Verbose

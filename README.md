@@ -30,15 +30,35 @@ The function, Check-PSModules, will check to see if the three required PowerShel
 
 The required PowerShell modules:
 
-  - CloudConnect (https://www.powershellgallery.com/packages/CloudConnect/1.1.2)
+  - ExchangeOnlineManagement (https://www.powershellgallery.com/packages/ExchangeOnlineManagement/2.0.3)
   - AzureAD (https://www.powershellgallery.com/packages/AzureAD/2.0.2.128)
   - MSOnline (https://www.powershellgallery.com/packages/MSOnline/1.1.183.57)
 
+To install the PowerShell modules, run the following commands:
+
+```
+Install-Module ExchangeOnlineManagement
+Install-Module AzureAD
+Install-Module MSOnline 
+```
+
 ## Usage ##
 
-To use Sparrow.ps1, type the following command into a PowerShell window (assuming file is in your working directory):
+To download and run Sparrow.ps1, type the following command into a PowerShell window (assuming file is in your working directory):
 
-`.\Sparrow.ps1`
+```
+Invoke-WebRequest 'https://github.com/cisagov/Sparrow/raw/develop/Sparrow.ps1' -OutFile 'Sparrow.ps1' -UseBasicParsing
+.\Sparrow.ps1
+```
+
+## Using Behind A Proxy ##
+
+If you are executing the script from behind a proxy, you may need to run the following commands, substituting your proxy server prior to execution:
+
+```
+[System.Net.WebRequest]::DefaultWebProxy = New-Object System.Net.WebProxy('http://proxyname:port')
+[System.Net.WebRequest]::DefaultWebProxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials
+```
 
 ## Issues ##
 

@@ -11,7 +11,7 @@ The following AzureAD/m365 permissions are required to run Sparrow.ps1, and prov
    - Azure Active Directory:
      - Security Reader
    - Security and Compliance Center:
-     - Compliance Adminstrator
+     - Compliance Administrator
    - Exchange Online Admin Center: Utilize a custom group for these specific permissions:
      - Mail Recipients
      - Security Group Creation and Membership
@@ -62,7 +62,7 @@ All contributions to this project will be released under the CC0 dedication. By 
 
 NOTICE
 
-This software package (“software” or “code”) was created by the United States Government and is not subject to copyright. You may use, modify, or redistribute the code in any manner. However, you may not subsequently copyright the code as it is distributed. The United States Government makes no claim of copyright on the changes you effect, nor will it will it restrict your distribution of bona fide changes to the software. If you decide to update or redistribute the code, please include this notice with the code. Where relevant, we ask that you credit the Cybersecurity and Infrastructure Security Agency with the following statement: “Original code developed by the Cybersecurity and Infrastructure Security Agency (CISA), U.S. Department of Homeland Security.”
+This software package (“software” or “code”) was created by the United States Government and is not subject to copyright. You may use, modify, or redistribute the code in any manner. However, you may not subsequently copyright the code as it is distributed. The United States Government makes no claim of copyright on the changes you effect, nor will it restrict your distribution of bona fide changes to the software. If you decide to update or redistribute the code, please include this notice with the code. Where relevant, we ask that you credit the Cybersecurity and Infrastructure Security Agency with the following statement: “Original code developed by the Cybersecurity and Infrastructure Security Agency (CISA), U.S. Department of Homeland Security.”
 
 USE THIS SOFTWARE AT YOUR OWN RISK. THIS SOFTWARE COMES WITH NO WARRANTY, EITHER EXPRESS OR IMPLIED. THE UNITED STATES GOVERNMENT ASSUMES NO LIABILITY FOR THE USE OR MISUSE OF THIS SOFTWARE OR ITS DERIVATIVES.
 

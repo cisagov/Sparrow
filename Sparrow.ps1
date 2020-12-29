@@ -135,7 +135,7 @@ Function Get-UALData {
              Write-Host "MailItemsAccessed query will be skipped as it is not present without an E5/G5 license."
         }
 
-        #Searches for the AppID to see if it accessed Sharepoint or OneDrive items
+        #Searches for the AppID to see if it accessed SharePoint or OneDrive items
         Write-Verbose "Searching for $SusAppId in the FileAccessed and FileAccessedExtended operations in the UAL."
         $SusFileItems = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -Operations "FileAccessed","FileAccessedExtended" -ResultSize 5000 -FreeText $SusAppId -Verbose | Select-Object -ExpandProperty AuditData | Convertfrom-Json
         #You can modify the resultant CSV output by changing the -CsvName parameter

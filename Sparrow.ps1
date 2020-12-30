@@ -1,8 +1,24 @@
-Function Check-PSModules{
+[cmdletbinding()]Param(
+    [Parameter()]
+    [string] $AzureEnvironment,
+    [Parameter()]
+    [string] $ExchangeEnvironment,
+    [Parameter()]
+    [datetime] $StartDate = [DateTime]::UtcNow.AddYears(-1).AddMinutes(10),
+    [Parameter()]
+    [datetime] $EndDate = [DateTime]::UtcNow,
+    [Parameter()]
+    [string] $ExportDir = (Join-Path ([Environment]::GetFolderPath("Desktop")) 'ExportDir')
+)
 
-    [cmdletbinding()]Param()
+Function Import-PSModules{
 
-    $ModuleArray = @("CloudConnect","AzureAD","MSOnline")
+    [cmdletbinding()]Param(
+        [Parameter(Mandatory=$true)]
+        [string] $ExportDir
+        )
+
+    $ModuleArray = @("ExchangeOnlineManagement","AzureAD","MSOnline")
 
     ForEach ($ReqModule in $ModuleArray){
         If ($null -eq (Get-Module $ReqModule -ListAvailable -ErrorAction SilentlyContinue)){
@@ -19,23 +35,91 @@ Function Check-PSModules{
 
     #If you want to change the default export directory, please change the $ExportDir value.
     #Otherwise, the default export is the user's home directory, Desktop folder, and ExportDir folder.
-    $ExportDir = "$home\Desktop\ExportDir"
     If (!(Test-Path $ExportDir)){
         New-Item -Path $ExportDir -ItemType "Directory" -Force
     }
 }
 
+Function Get-AzureEnvironments() {
+
+    [cmdletbinding()]Param(
+        [Parameter()]
+        [string] $AzureEnvironment, 
+        [Parameter()]
+        [string] $ExchangeEnvironment
+        )
+
+    $AzureEnvironments = [Microsoft.Open.Azure.AD.CommonLibrary.AzureEnvironment]::PublicEnvironments.Keys
+    While ($AzureEnvironments -cnotcontains $AzureEnvironment -or [string]::IsNullOrWhiteSpace($AzureEnvironment)) {
+        Write-Host 'Azure Environments'
+        Write-Host '------------------'
+        $AzureEnvironments | ForEach-Object { Write-Host $_ }
+        $AzureEnvironment = Read-Host 'Choose your Azure Environment [AzureCloud]'
+        If ([string]::IsNullOrWhiteSpace($AzureEnvironment)) { $AzureEnvironment = 'AzureCloud' }
+    }
+
+    $ExchangeEnvironments = [System.Enum]::GetNames([Microsoft.Exchange.Management.RestApiClient.ExchangeEnvironment])
+    While ($ExchangeEnvironments -cnotcontains $ExchangeEnvironment -or [string]::IsNullOrWhiteSpace($ExchangeEnvironment)) {
+        Write-Host 'Exchange Environments'
+        Write-Host '---------------------'
+        $ExchangeEnvironments | ForEach-Object { Write-Host $_ }
+        $ExchangeEnvironment = Read-Host 'Choose your Exchange Environment [O365Default]'
+        If ([string]::IsNullOrWhiteSpace($ExchangeEnvironment)) { $ExchangeEnvironment = 'O365Default' }
+    }
+
+    Return ($AzureEnvironment, $ExchangeEnvironment)
+}
+
+Function New-ExcelFromCsv() {
+
+    [cmdletbinding()]Param(
+        [Parameter(Mandatory=$true)]
+        [string] $ExportDir
+        )
+
+    Try {
+        $Excel = New-Object -ComObject Excel.Application
+    }
+    Catch { 
+        Write-Host 'Warning; Excel not found - skipping combined file.' 
+        Return
+    }
+
+    #Open each file and move it in a single workbook
+    $Excel.DisplayAlerts = $False
+    $Workbook = $Excel.Workbooks.Add()
+    $Csvs = Get-ChildItem -Path "${ExportDir}\*.csv" -Force
+    $ToDeletes = $Workbook.Sheets | Select-Object -ExpandProperty Name
+    ForEach ($Csv in $Csvs) {
+        $TempWorkbook = $Excel.Workbooks.Open($Csv.FullName)
+        $TempWorkbook.Sheets[1].Copy($Workbook.Sheets[1], [Type]::Missing) | Out-Null
+        $Workbook.Sheets[1].UsedRange.Columns.AutoFit() | Out-Null
+        $Workbook.Sheets[1].Name = $Csv.BaseName -replace '_Operations_.*',''
+    }
+
+    #Save out the new file
+    ForEach ($ToDelete in $ToDeletes) { $Workbook.Sheets[$ToDelete].Delete() }
+    $Workbook.SaveAs((Join-Path $ExportDir 'Summary_Export.xlsx'))
+    $Excel.Quit()
+}
+
 Function Get-UALData {
 
-    [cmdletbinding()]Param()
+    [cmdletbinding()]Param(
+        [Parameter(Mandatory=$true)]
+        [datetime] $StartDate,
+        [Parameter(Mandatory=$true)]
+        [datetime] $EndDate,
+        [Parameter(Mandatory=$true)]
+        [string] $AzureEnvironment,
+        [Parameter(Mandatory=$true)]
+        [string] $ExchangeEnvironment,
+        [Parameter(Mandatory=$true)]
+        [string] $ExportDir
+        )
 
     #Calling on CloudConnect to connect to the tenant's Exchange Online environment via PowerShell
-    Connect-EXO
-
-    $EndDate = (Get-Date)
-    #If you want to change the length of time, please edit the value in $StartDate accordingly
-    #Example, if you want to only pull 45 days, the $StartDate value would be (Get-Date).AddDays(-45)
-    $StartDate = (Get-Date).AddDays(-90)
+    Connect-ExchangeOnline -ExchangeEnvironmentName $ExchangeEnvironment
 
     $LicenseQuestion = Read-Host 'Do you have an Office 365/Microsoft 365 E5/G5 license? Y/N'
     Switch ($LicenseQuestion){
@@ -52,76 +136,76 @@ Function Get-UALData {
     } Else{
         Write-Host "Skipping AppID investigation"
     }
-    
+
     #Searches for any modifications to the domain and federation settings on a tenant's domain
     Write-Verbose "Searching for 'Set domain authentication' and 'Set federation settings on domain' operations in the UAL."
     $DomainData = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -RecordType AzureActiveDirectory -Operations "Set domain authentication","Set federation settings on domain" -ResultSize 5000 | Select-Object -ExpandProperty AuditData | Convertfrom-Json
     #You can modify the resultant CSV output by changing the -CsvName parameter
     #By default, it will show up as Domain_Operations_Export.csv
-    Export-UALData -UALInput $DomainData -CsvName "Domain_Operations_Export" -WorkloadType "AAD"
+    Export-UALData -ExportDir $ExportDir -UALInput $DomainData -CsvName "Domain_Operations_Export" -WorkloadType "AAD"
 
     #Searches for any modifications or credential modifications to an application
     Write-Verbose "Searching for 'Update application' and 'Update application ? Certificates and secrets management' in the UAL."
     $AppData = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -RecordType AzureActiveDirectory -Operations "Update application","Update application ? Certificates and secrets management" -ResultSize 5000 | Select-Object -ExpandProperty AuditData | Convertfrom-Json
     #You can modify the resultant CSV output by changing the -CsvName parameter
     #By default, it will show up as AppUpdate_Operations_Export.csv
-    Export-UALData -UALInput $AppData -CsvName "AppUpdate_Operations_Export" -WorkloadType "AAD"
+    Export-UALData -ExportDir $ExportDir -UALInput $AppData -CsvName "AppUpdate_Operations_Export" -WorkloadType "AAD"
 
     #Searches for any modifications or credential modifications to a service principal
     Write-Verbose "Searching for 'Update service principal' and 'Add service principal credentials' in the UAL."
     $SpData = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -RecordType AzureActiveDirectory -Operations "Update service principal","Add service principal credentials" -ResultSize 5000 | Select-Object -ExpandProperty AuditData | Convertfrom-Json
     #You can modify the resultant CSV output by changing the -CsvName parameter
     #By default, it will show up as ServicePrincipal_Operations_Export.csv   
-    Export-UALData -UALInput $SpData -CsvName "ServicePrincipal_Operations_Export" -WorkloadType "AAD"
+    Export-UALData -ExportDir $ExportDir -UALInput $SpData -CsvName "ServicePrincipal_Operations_Export" -WorkloadType "AAD"
 
     #Searches for any app role assignments to service principals, users, and groups
     Write-Verbose "Searching for 'Add app role assignment to service principal', 'Add app role assignment grant to user', and 'Add app role assignment to group' in the UAL."
     $AppRoleData = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -RecordType AzureActiveDirectory -Operations "Add app role assignment" -ResultSize 5000 | Select-Object -ExpandProperty AuditData | Convertfrom-Json
     #You can modify the resultant CSV output by changing the -CsvName parameter
     #By default, it will show up as AppRoleAssignment_Operations_Export.csv      
-    Export-UALData -UALInput $AppRoleData -CsvName "AppRoleAssignment_Operations_Export" -WorkloadType "AAD"
+    Export-UALData -ExportDir $ExportDir -UALInput $AppRoleData -CsvName "AppRoleAssignment_Operations_Export" -WorkloadType "AAD"
 
     #Searches for any OAuth or application consents
     Write-Verbose "Searching for 'Add OAuth2PermissionGrant' and 'Consent to application' in the UAL."
     $ConsentData = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -RecordType AzureActiveDirectory -Operations "Add OAuth2PermissionGrant","Consent to application" -ResultSize 5000 | Select-Object -ExpandProperty AuditData | Convertfrom-Json
     #You can modify the resultant CSV output by changing the -CsvName parameter
     #By default, it will show up as Consent_Operations_Export.csv       
-    Export-UALData -UALInput $ConsentData -CsvName "Consent_Operations_Export" -WorkloadType "AAD"
+    Export-UALData -ExportDir $ExportDir -UALInput $ConsentData -CsvName "Consent_Operations_Export" -WorkloadType "AAD"
 
     #Searches for SAML token usage anomaly (UserAuthenticationValue of 16457) in the Unified Audit Logs
     Write-Verbose "Searching for 16457 in UserLoggedIn and UserLoginFailed operations in the UAL."
     $SAMLData = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -Operations "UserLoggedIn","UserLoginFailed" -ResultSize 5000 -FreeText "16457" | Select-Object -ExpandProperty AuditData | Convertfrom-Json
     #You can modify the resultant CSV output by changing the -CsvName parameter
     #By default, it will show up as SAMLToken_Operations_Export.csv      
-    Export-UALData -UALInput $SAMLData -CsvName "SAMLToken_Operations_Export" -WorkloadType "AAD"
+    Export-UALData -ExportDir $ExportDir -UALInput $SAMLData -CsvName "SAMLToken_Operations_Export" -WorkloadType "AAD"
 
     #Searches for PowerShell logins into mailboxes
     Write-Verbose "Searching for PowerShell logins into mailboxes in the UAL."
     $PSMailboxData = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -ResultSize 5000 -Operations "MailboxLogin" -FreeText "Powershell" | Select-Object -ExpandProperty AuditData | Convertfrom-Json
     #You can modify the resultant CSV output by changing the -CsvName parameter
     #By default, it will show up as PSMailbox_Operations_Export.csv      
-    Export-UALData -UALInput $PSMailboxData -CsvName "PSMailbox_Operations_Export" -WorkloadType "EXO2"
+    Export-UALData -ExportDir $ExportDir -UALInput $PSMailboxData -CsvName "PSMailbox_Operations_Export" -WorkloadType "EXO2"
 
     #Searches for well-known AppID for Exchange Online PowerShell
     Write-Verbose "Searching for PowerShell logins using known PS application ids in the UAL."
     $PSLoginData1 = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -ResultSize 5000  -FreeText "a0c73c16-a7e3-4564-9a95-2bdf47383716" | Select-Object -ExpandProperty AuditData | Convertfrom-Json
     #You can modify the resultant CSV output by changing the -CsvName parameter
     #By default, it will show up as PSLogin_Operations_Export.csv  
-    Export-UALData -UALInput $PSLoginData1 -CsvName "PSLogin_Operations_Export" -WorkloadType "AAD"
+    Export-UALData -ExportDir $ExportDir -UALInput $PSLoginData1 -CsvName "PSLogin_Operations_Export" -WorkloadType "AAD"
 
     #Searches for well-known AppID for PowerShell
     $PSLoginData2 = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -ResultSize 5000  -FreeText "1b730954-1685-4b74-9bfd-dac224a7b894" | Select-Object -ExpandProperty AuditData | Convertfrom-Json
     #The resultant CSV will be appended with the $PSLoginData* resultant CSV.
     #If you want a separate CSV with a different name, remove the -AppendType parameter (-AppendType "Append")
     #By default, it will show up as part of the PSLogin_Operations_Export.csv  
-    Export-UALData -UALInput $PSLoginData2 -CsvName "PSLogin_Operations_Export" -WorkloadType "AAD" -AppendType "Append"
+    Export-UALData -ExportDir $ExportDir -UALInput $PSLoginData2 -CsvName "PSLogin_Operations_Export" -WorkloadType "AAD" -AppendType "Append"
 
     #Searches for WinRM useragent string in the user logged in and user login failed operations
     $PSLoginData3 = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -ResultSize 5000 -Operations "UserLoggedIn","UserLoginFailed" -FreeText "WinRM" | Select-Object -ExpandProperty AuditData | Convertfrom-Json
     #The resultant CSV will be appended with the $PSLoginData* resultant CSV.
     #If you want a separate CSV with a different name, remove the -AppendType parameter (-AppendType "Append")
     #By default, it will show up as part of the PSLogin_Operations_Export.csv 
-    Export-UALData -UALInput $PSLoginData3 -CsvName "PSLogin_Operations_Export" -WorkloadType "AAD" -AppendType "Append"
+    Export-UALData -ExportDir $ExportDir -UALInput $PSLoginData3 -CsvName "PSLogin_Operations_Export" -WorkloadType "AAD" -AppendType "Append"
 
     If ($AppIdInvestigation -eq "Yes"){
         If ($LicenseAnswer -eq "Yes"){
@@ -130,26 +214,31 @@ Function Get-UALData {
             $SusMailItems = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -Operations "MailItemsAccessed" -ResultSize 5000 -FreeText $SusAppId -Verbose | Select-Object -ExpandProperty AuditData | Convertfrom-Json
             #You can modify the resultant CSV output by changing the -CsvName parameter
             #By default, it will show up as MailItems_Operations_Export.csv  
-            Export-UALData -UALInput $SusMailItems -CsvName "MailItems_Operations_Export" -WorkloadType "EXO"
+            Export-UALData -ExportDir $ExportDir -UALInput $SusMailItems -CsvName "MailItems_Operations_Export" -WorkloadType "EXO"
         } else {
-             Write-Host "MailItemsAccessed query will be skipped as it is not present without an E5/G5 license."
+            Write-Host "MailItemsAccessed query will be skipped as it is not present without an E5/G5 license."
         }
 
-        #Searches for the AppID to see if it accessed Sharepoint or OneDrive items
+        #Searches for the AppID to see if it accessed SharePoint or OneDrive items
         Write-Verbose "Searching for $SusAppId in the FileAccessed and FileAccessedExtended operations in the UAL."
         $SusFileItems = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -Operations "FileAccessed","FileAccessedExtended" -ResultSize 5000 -FreeText $SusAppId -Verbose | Select-Object -ExpandProperty AuditData | Convertfrom-Json
         #You can modify the resultant CSV output by changing the -CsvName parameter
         #By default, it will show up as FileItems_Operations_Export.csv  
-        Export-UALData -UALInput $SusFileItems -CsvName "FileItems_Operations_Export" -WorkloadType "Sharepoint"
+        Export-UALData -ExportDir $ExportDir -UALInput $SusFileItems -CsvName "FileItems_Operations_Export" -WorkloadType "SharePoint"
     }
 }
 
 Function Get-AzureDomains{
 
-    [cmdletbinding()]Param()
+    [cmdletbinding()]Param(
+        [Parameter(Mandatory=$true)]
+        [string] $AzureEnvironment,
+        [Parameter(Mandatory=$true)]
+        [string] $ExportDir
+        )
 
     #Connect to AzureAD
-    Connect-AzureAD
+    Connect-AzureAD -AzureEnvironmentName $AzureEnvironment
 
     $DomainData = Get-AzureADDomain
     $DomainArr = @()
@@ -171,15 +260,20 @@ Function Get-AzureDomains{
         $DomainObj = New-Object -TypeName PSObject -Property $DomainProps
         $DomainArr += $DomainObj
     }
-    $DomainArr | Export-Csv $home\Desktop\ExportDir\Domain_List.csv -NoTypeInformation
+    $DomainArr | Export-Csv $ExportDir\Domain_List.csv -NoTypeInformation
 }
 
 Function Get-AzureSPAppRoles{
 
-    [cmdletbinding()]Param()
+    [cmdletbinding()]Param(
+        [Parameter(Mandatory=$true)]
+        [string] $AzureEnvironment,
+        [Parameter(Mandatory=$true)]
+        [string] $ExportDir
+        )
 
     #Connect to your tenant's AzureAD environment
-    Connect-AzureAD
+    Connect-AzureAD -AzureEnvironmentName $AzureEnvironment
 
     #Retrieve all service principals that are applications
     $SPArr = Get-AzureADServicePrincipal -All $true | Where-Object {$_.ServicePrincipalType -eq "Application"}
@@ -187,7 +281,7 @@ Function Get-AzureSPAppRoles{
     #Retrieve all service principals that have a display name of Microsoft Graph
     $GraphSP = Get-AzureADServicePrincipal -All $true | Where-Object {$_.DisplayName -eq "Microsoft Graph"}
 
-    $GraphAppRoles = $GraphSP.AppRoles | Select -Property AllowedMemberTypes, Id, Value
+    $GraphAppRoles = $GraphSP.AppRoles | Select-Object -Property AllowedMemberTypes, Id, Value
 
     $AppRolesArr = @()
     Foreach ($SP in $SPArr) {
@@ -206,23 +300,30 @@ Function Get-AzureSPAppRoles{
             $AppRolesArr += $ListObj 
             }
         }
-    #If you want to change the default export directory, please change the $home\Desktop\ExportDir value.
+    #If you want to change the default export directory, please change the $ExportDir value.
     #Otherwise, the default export is the user's home directory, Desktop folder, and ExportDir folder.
     #You can change the name of the CSV as well, the default name is "ApplicationGraphPermissions"
-    $AppRolesArr | Export-Csv $home\Desktop\ExportDir\ApplicationGraphPermissions.csv -NoTypeInformation
+    $AppRolesArr | Export-Csv $ExportDir\ApplicationGraphPermissions.csv -NoTypeInformation
 }
 
 Function Export-UALData {
     Param(
         [Parameter(ValueFromPipeline=$True)]
         [Object[]]$UALInput,
-        [Parameter()]
+        [Parameter(Mandatory=$true)]
         [String]$CsvName,
-        [Parameter()]
+        [Parameter(Mandatory=$true)]
         [String]$WorkloadType,
         [Parameter()]
-        [String]$AppendType
+        [String]$AppendType,
+        [Parameter(Mandatory=$true)]
+        [string] $ExportDir
         )
+
+        If ($UALInput.Count -eq 5000)
+        {
+            Write-Host 'Warning: Result set may have been truncated; narrow start/end date.'
+        }
 
         $DataArr = @()
         If ($WorkloadType -eq "AAD") {
@@ -321,7 +422,7 @@ Function Export-UALData {
                 $DataObj = New-Object -TypeName PSObject -Property $DataProps
                 $DataArr += $DataObj           
             }
-        } elseif ($WorkloadType -eq "Sharepoint"){
+        } elseif ($WorkloadType -eq "SharePoint"){
             ForEach ($Data in $UALInput){
                 $DataProps = [ordered]@{
                     CreationTime = $Data.CreationTime
@@ -356,9 +457,9 @@ Function Export-UALData {
             }
         }
         If ($AppendType -eq "Append"){
-            $DataArr | Export-csv $home\Desktop\ExportDir\$CsvName.csv -NoTypeInformation -Append
+            $DataArr | Export-csv $ExportDir\$CsvName.csv -NoTypeInformation -Append
         } Else {
-            $DataArr | Export-csv $home\Desktop\ExportDir\$CsvName.csv -NoTypeInformation
+            $DataArr | Export-csv $ExportDir\$CsvName.csv -NoTypeInformation
         }
         
         Remove-Variable UALInput -ErrorAction SilentlyContinue
@@ -369,7 +470,9 @@ Function Export-UALData {
 }
 
 #Function calls, if you do not need a particular check, you can comment it out below with #
-Check-PSModules -Verbose
-Get-UALData -Verbose
-Get-AzureDomains -Verbose
-Get-AzureSPAppRoles -Verbose
+Import-PSModules -ExportDir $ExportDir -Verbose
+($AzureEnvironment, $ExchangeEnvironment) = Get-AzureEnvironments -AzureEnvironment $AzureEnvironment -ExchangeEnvironment $ExchangeEnvironment
+Get-UALData -ExportDir $ExportDir -StartDate $StartDate -EndDate $EndDate -ExchangeEnvironment $ExchangeEnvironment -AzureEnvironment $AzureEnvironment -Verbose
+Get-AzureDomains -AzureEnvironment $AzureEnvironment -ExportDir $ExportDir -Verbose
+Get-AzureSPAppRoles -AzureEnvironment $AzureEnvironment -ExportDir $ExportDir -Verbose
+New-ExcelFromCsv -ExportDir $ExportDir

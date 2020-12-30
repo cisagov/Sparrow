@@ -11,7 +11,7 @@ The following AzureAD/m365 permissions are required to run Sparrow.ps1, and prov
    - Azure Active Directory:
      - Security Reader
    - Security and Compliance Center:
-     - Compliance Adminstrator
+     - Compliance Administrator
    - Exchange Online Admin Center: Utilize a custom group for these specific permissions:
      - Mail Recipients
      - Security Group Creation and Membership

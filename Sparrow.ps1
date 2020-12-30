@@ -11,7 +11,7 @@
     [string] $ExportDir = (Join-Path ([Environment]::GetFolderPath("Desktop")) 'ExportDir')
 )
 
-Function Check-PSModules{
+Function Import-PSModules{
 
     [cmdletbinding()]Param(
         [Parameter(Mandatory=$true)]
@@ -54,7 +54,7 @@ Function Get-AzureEnvironments() {
         Write-Host 'Azure Environments'
         Write-Host '------------------'
         $AzureEnvironments | ForEach-Object { Write-Host $_ }
-        $AzureEnvironment = Read-Host 'Choose your Azure Environment'
+        $AzureEnvironment = Read-Host 'Choose your Azure Environment [AzureCloud]'
         If ([string]::IsNullOrWhiteSpace($AzureEnvironment)) { $AzureEnvironment = 'AzureCloud' }
     }
 
@@ -63,7 +63,7 @@ Function Get-AzureEnvironments() {
         Write-Host 'Exchange Environments'
         Write-Host '---------------------'
         $ExchangeEnvironments | ForEach-Object { Write-Host $_ }
-        $ExchangeEnvironment = Read-Host 'Choose your Exchange Environment (enter for default)'
+        $ExchangeEnvironment = Read-Host 'Choose your Exchange Environment [O365Default]'
         If ([string]::IsNullOrWhiteSpace($ExchangeEnvironment)) { $ExchangeEnvironment = 'O365Default' }
     }
 
@@ -219,12 +219,12 @@ Function Get-UALData {
             Write-Host "MailItemsAccessed query will be skipped as it is not present without an E5/G5 license."
         }
 
-        #Searches for the AppID to see if it accessed Sharepoint or OneDrive items
+        #Searches for the AppID to see if it accessed SharePoint or OneDrive items
         Write-Verbose "Searching for $SusAppId in the FileAccessed and FileAccessedExtended operations in the UAL."
         $SusFileItems = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -Operations "FileAccessed","FileAccessedExtended" -ResultSize 5000 -FreeText $SusAppId -Verbose | Select-Object -ExpandProperty AuditData | Convertfrom-Json
         #You can modify the resultant CSV output by changing the -CsvName parameter
         #By default, it will show up as FileItems_Operations_Export.csv  
-        Export-UALData -ExportDir $ExportDir -UALInput $SusFileItems -CsvName "FileItems_Operations_Export" -WorkloadType "Sharepoint"
+        Export-UALData -ExportDir $ExportDir -UALInput $SusFileItems -CsvName "FileItems_Operations_Export" -WorkloadType "SharePoint"
     }
 }
 
@@ -281,7 +281,7 @@ Function Get-AzureSPAppRoles{
     #Retrieve all service principals that have a display name of Microsoft Graph
     $GraphSP = Get-AzureADServicePrincipal -All $true | Where-Object {$_.DisplayName -eq "Microsoft Graph"}
 
-    $GraphAppRoles = $GraphSP.AppRoles | Select -Property AllowedMemberTypes, Id, Value
+    $GraphAppRoles = $GraphSP.AppRoles | Select-Object -Property AllowedMemberTypes, Id, Value
 
     $AppRolesArr = @()
     Foreach ($SP in $SPArr) {
@@ -422,7 +422,7 @@ Function Export-UALData {
                 $DataObj = New-Object -TypeName PSObject -Property $DataProps
                 $DataArr += $DataObj           
             }
-        } elseif ($WorkloadType -eq "Sharepoint"){
+        } elseif ($WorkloadType -eq "SharePoint"){
             ForEach ($Data in $UALInput){
                 $DataProps = [ordered]@{
                     CreationTime = $Data.CreationTime
@@ -470,7 +470,7 @@ Function Export-UALData {
 }
 
 #Function calls, if you do not need a particular check, you can comment it out below with #
-Check-PSModules -ExportDir $ExportDir -Verbose
+Import-PSModules -ExportDir $ExportDir -Verbose
 ($AzureEnvironment, $ExchangeEnvironment) = Get-AzureEnvironments -AzureEnvironment $AzureEnvironment -ExchangeEnvironment $ExchangeEnvironment
 Get-UALData -ExportDir $ExportDir -StartDate $StartDate -EndDate $EndDate -ExchangeEnvironment $ExchangeEnvironment -AzureEnvironment $AzureEnvironment -Verbose
 Get-AzureDomains -AzureEnvironment $AzureEnvironment -ExportDir $ExportDir -Verbose

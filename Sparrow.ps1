@@ -1,4 +1,4 @@
-Function Check-PSModules{
+Function Initialize-PSModules{
 
     [cmdletbinding()]Param()
 
@@ -187,7 +187,7 @@ Function Get-AzureSPAppRoles{
     #Retrieve all service principals that have a display name of Microsoft Graph
     $GraphSP = Get-AzureADServicePrincipal -All $true | Where-Object {$_.DisplayName -eq "Microsoft Graph"}
 
-    $GraphAppRoles = $GraphSP.AppRoles | Select -Property AllowedMemberTypes, Id, Value
+    $GraphAppRoles = $GraphSP.AppRoles | Select-Object -Property AllowedMemberTypes, Id, Value
 
     $AppRolesArr = @()
     Foreach ($SP in $SPArr) {
@@ -369,7 +369,7 @@ Function Export-UALData {
 }
 
 #Function calls, if you do not need a particular check, you can comment it out below with #
-Check-PSModules -Verbose
+Initialize-PSModules -Verbose
 Get-UALData -Verbose
 Get-AzureDomains -Verbose
 Get-AzureSPAppRoles -Verbose

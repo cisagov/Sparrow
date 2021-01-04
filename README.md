@@ -47,8 +47,7 @@ Install-Module MSOnline
 To download and run Sparrow.ps1, type the following command into a PowerShell window (assuming file is in your working directory):
 
 ```
-Invoke-WebRequest 'https://github.com/cisagov/Sparrow/raw/develop/Sparrow.ps1' -OutFile 'Sparrow.ps1' -UseBasicParsing
-.\Sparrow.ps1
+Invoke-WebRequest 'https://github.com/cisagov/Sparrow/raw/develop/Sparrow.ps1' -OutFile 'Sparrow.ps1' -UseBasicParsing; .\Sparrow.ps1
 ```
 
 ## Using Behind A Proxy ##

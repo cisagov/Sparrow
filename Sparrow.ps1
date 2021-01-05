@@ -4,7 +4,7 @@
     [Parameter()]
     [string] $ExchangeEnvironment,
     [Parameter()]
-    [datetime] $StartDate = [DateTime]::UtcNow.AddYears(-1).AddMinutes(10),
+    [datetime] $StartDate = [DateTime]::UtcNow.AddYears(-1).AddMinutes(60),
     [Parameter()]
     [datetime] $EndDate = [DateTime]::UtcNow,
     [Parameter()]

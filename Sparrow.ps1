@@ -8,7 +8,9 @@
     [Parameter()]
     [datetime] $EndDate = [DateTime]::UtcNow,
     [Parameter()]
-    [string] $ExportDir = (Join-Path ([Environment]::GetFolderPath("Desktop")) 'ExportDir')
+    [string] $ExportDir = (Join-Path ([Environment]::GetFolderPath("Desktop")) 'ExportDir'),
+    [Parameter()]
+    [switch] $NoO365 = $false
 )
 
 Function Import-PSModules{
@@ -58,13 +60,18 @@ Function Get-AzureEnvironments() {
         If ([string]::IsNullOrWhiteSpace($AzureEnvironment)) { $AzureEnvironment = 'AzureCloud' }
     }
 
-    $ExchangeEnvironments = [System.Enum]::GetNames([Microsoft.Exchange.Management.RestApiClient.ExchangeEnvironment])
-    While ($ExchangeEnvironments -cnotcontains $ExchangeEnvironment -or [string]::IsNullOrWhiteSpace($ExchangeEnvironment)) {
-        Write-Host 'Exchange Environments'
-        Write-Host '---------------------'
-        $ExchangeEnvironments | ForEach-Object { Write-Host $_ }
-        $ExchangeEnvironment = Read-Host 'Choose your Exchange Environment [O365Default]'
-        If ([string]::IsNullOrWhiteSpace($ExchangeEnvironment)) { $ExchangeEnvironment = 'O365Default' }
+    If ($NoO365 -eq $false) {
+        $ExchangeEnvironments = [System.Enum]::GetNames([Microsoft.Exchange.Management.RestApiClient.ExchangeEnvironment])
+        While ($ExchangeEnvironments -cnotcontains $ExchangeEnvironment -or [string]::IsNullOrWhiteSpace($ExchangeEnvironment) -and $ExchangeEnvironment -ne "None") {
+            Write-Host 'Exchange Environments'
+            Write-Host '---------------------'
+            $ExchangeEnvironments | ForEach-Object { Write-Host $_ }
+            Write-Host 'None'
+            $ExchangeEnvironment = Read-Host 'Choose your Exchange Environment [O365Default]'
+            If ([string]::IsNullOrWhiteSpace($ExchangeEnvironment)) { $ExchangeEnvironment = 'O365Default' }
+        }
+    } Else {
+        $ExchangeEnvironment = "None"
     }
 
     Return ($AzureEnvironment, $ExchangeEnvironment)
@@ -118,6 +125,7 @@ Function Get-UALData {
         [string] $ExportDir
         )
 
+        
     #Calling on CloudConnect to connect to the tenant's Exchange Online environment via PowerShell
     Connect-ExchangeOnline -ExchangeEnvironmentName $ExchangeEnvironment
 
@@ -472,7 +480,9 @@ Function Export-UALData {
 #Function calls, if you do not need a particular check, you can comment it out below with #
 Import-PSModules -ExportDir $ExportDir -Verbose
 ($AzureEnvironment, $ExchangeEnvironment) = Get-AzureEnvironments -AzureEnvironment $AzureEnvironment -ExchangeEnvironment $ExchangeEnvironment
-Get-UALData -ExportDir $ExportDir -StartDate $StartDate -EndDate $EndDate -ExchangeEnvironment $ExchangeEnvironment -AzureEnvironment $AzureEnvironment -Verbose
+If ($($ExchangeEnvironment -ne "None") -and $($NoO365 -eq $false)) {
+    Get-UALData -ExportDir $ExportDir -StartDate $StartDate -EndDate $EndDate -ExchangeEnvironment $ExchangeEnvironment -AzureEnvironment $AzureEnvironment -Verbose
+} 
 Get-AzureDomains -AzureEnvironment $AzureEnvironment -ExportDir $ExportDir -Verbose
 Get-AzureSPAppRoles -AzureEnvironment $AzureEnvironment -ExportDir $ExportDir -Verbose
 New-ExcelFromCsv -ExportDir $ExportDir

@@ -105,7 +105,11 @@ Function New-ExcelFromCsv() {
     }
 
     #Save out the new file
-    ForEach ($ToDelete in $ToDeletes) { $Workbook.Sheets[$ToDelete].Delete() }
+    ForEach ($ToDelete in $ToDeletes) { 
+        $Workbook.Activate()
+        $Workbook.Sheets[$ToDelete].Activate()
+        $Workbook.Sheets[$ToDelete].Delete()
+    }
     $Workbook.SaveAs((Join-Path $ExportDir 'Summary_Export.xlsx'))
     $Excel.Quit()
 }

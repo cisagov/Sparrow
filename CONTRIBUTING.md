@@ -24,19 +24,7 @@ one.
 
 ## Pull requests ##
 
-If you choose to [submit a pull
-request](https://github.com/cisagov/sparrow/pulls), you will
-notice that our continuous integration (CI) system runs a fairly
-extensive set of linters and syntax checkers.  Your pull request may
-fail these checks, and that's OK.  If you want you can stop there and
-wait for us to make the necessary corrections to ensure your code
-passes the CI checks.
-
-If you want to make the changes yourself, or if you want to become a
-regular contributor, then you will want to set up
-[pre-commit](https://pre-commit.com/) on your local machine.  Once you
-do that, the CI checks will run locally before you even write your
-commit message.  This speeds up your development cycle considerably.
+If you would like to submit a pull request, please submit it [here](https://github.com/cisagov/sparrow/pulls).
 
 ## Public domain ##
 

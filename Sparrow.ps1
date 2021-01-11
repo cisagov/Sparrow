@@ -361,7 +361,7 @@ Function Get-AzureSPAppRoles{
         [string] $AzureEnvironment,
         [Parameter(Mandatory=$true)]
         [string] $ExportDir,
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory=$false)]
         [string] $Credential
         )
 

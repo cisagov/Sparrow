@@ -154,6 +154,7 @@ Function Get-UALData {
     
     If ($AppIdInvestigation -eq "Yes"){
         $SusAppId = Read-Host "Enter the application's AppID to investigate"
+        Connect-AzureAD -AzureEnvironmentName $AzureEnvironment -Credential $Creds
         $AzureAppIds=Get-AzureADApplication -All
     } Else{
         Write-Host "Skipping AppID investigation"

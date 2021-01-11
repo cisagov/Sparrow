@@ -281,7 +281,7 @@ Function Get-UALData {
             $DirName=$AzureAppId.DisplayName
             $InvestigationMailExportDir=(Get-Item -Path $InvestigationExportParentDir).FullName+"\$DirName"
             
-            if (!(test-path $InvestigationExportDir))
+            if (!(test-path $InvestigationMailExportDir))
             {
                 new-item -Type Directory -Path $InvestigationMailExportDir -Force
             }

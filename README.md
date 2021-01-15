@@ -4,6 +4,8 @@ Sparrow.ps1 was created by CISA's Cloud Forensics team to help detect possible c
  
 Sparrow.ps1 will check and install the required PowerShell modules on the analysis machine, check the unified audit log in Azure/M365 for certain indicators of compromise (IoC's), list Azure AD domains, and check Azure service principals and their Microsoft Graph API permissions to identify potential malicious activity. The tool then outputs the data into multiple CSV files in a default directory.
 
+For more guidance on how to use Sparrow, please see: https://us-cert.cisa.gov/ncas/alerts/aa21-008a
+
 ## Requirements ##
 
 The following AzureAD/m365 permissions are required to run Sparrow.ps1, and provide it read-only access to the Tenant.

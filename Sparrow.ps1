@@ -169,7 +169,8 @@ Function Get-UALData {
     }
     If ($AppIdQuestion_GetAll -eq "Yes"){
         write-Host "Gathering Azure Application IDs..."
-        $AzureAppIds=Get-AzureADApplication -All:$true
+        Connect-AzureAD -AzureEnvironmentName $AzureEnvironment -Credential $Creds
+        $AzureAppIds=Get-AzureADServicePrincipal -All $true | Where-Object {$_.ServicePrincipalType -eq "Application"}
     } Else{
         Write-Host "Skipping Full AppID investigation"
     }
@@ -251,7 +252,6 @@ Function Get-UALData {
            
             #Searches for the AppID to see if it accessed mail items.
             Write-Verbose "Searching for $SusAppId in the MailItemsAccessed operation in the UAL."
-            $GetSusAppId=Get-AzureADApplication -SearchString $SusAppId
             $SusMailItems = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -Operations "MailItemsAccessed" -ResultSize 5000 -FreeText $SusAppId -Verbose | Select-Object -ExpandProperty AuditData | Convertfrom-Json
             #You can modify the resultant CSV output by changing the -CsvName parameter
             #By default, it will show up as MailItems_Operations_Export.csv  
@@ -268,9 +268,15 @@ Function Get-UALData {
         Export-UALData -ExportDir $ExportDir -UALInput $SusFileItems -CsvName "FileItems_Operations_Export" -WorkloadType "SharePoint"
     }
 
+    <#Determines if Investigation of all Azure AppIds of type Application was requested
+    If true, and E5 license entitlement is yes, create a new sub-directory in $ExportDir, for AppInvestigations
+    This new directory becomes parent directory for AppId investigation results. Each child directory will have the name of the Displayname of the Ap, and the results
+    contained within will have the AppId in the title of the csv, to make identififcation easier. Also allows multiple results to co-exist in directory if moved later on.
+    #>
     If ($AppIdQuestion_GetAll -eq "Yes"){
     If ($LicenseAnswer -eq "Yes"){
         $InvestigationExportParentDir=(Get-Item -Path $ExportDir).FullName+"\AppInvestigations"
+        #Determines if the AppInvestigations path exists, and if not, creates that path
         if (!(test-path $InvestigationExportParentDir))
         {
             New-Item -ItemType Directory -Path $InvestigationExportParentDir -Force
@@ -280,7 +286,8 @@ Function Get-UALData {
             {
             $DirName=$AzureAppId.DisplayName
             $InvestigationMailExportDir=(Get-Item -Path $InvestigationExportParentDir).FullName+"\$DirName"
-            
+
+            #Determines if the AppInvestigation sub-directory by displayname path exists, and if not, creates that path
             if (!(test-path $InvestigationMailExportDir))
             {
                 new-item -Type Directory -Path $InvestigationMailExportDir -Force
@@ -301,7 +308,8 @@ Function Get-UALData {
             {
             $DirName=$AzureAppId.DisplayName
             $InvestigationFileExportDir=(Get-Item -Path $InvestigationExportParentDir).FullName+"\$DirName"
-            
+            #Determines if the AppInvestigation sub-directory by displayname path exists, and if not, creates that path
+            #This should always return true, as the detection/creation is handled in the previous section, but best to have detection in place.
             if (!(test-path $InvestigationFileExportDir))
             {
                 new-item -Type Directory -Path $InvestigationFileExportDir -Force

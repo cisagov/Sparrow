@@ -184,13 +184,6 @@ Function Get-UALData {
     #By default, it will show up as Consent_Operations_Export.csv       
     Export-UALData -ExportDir $ExportDir -UALInput $ConsentData -CsvName "Consent_Operations_Export" -WorkloadType "AAD"
 
-    #Searches for SAML token usage anomaly (UserAuthenticationValue of 16457) in the Unified Audit Logs
-    Write-Verbose "Searching for 16457 in UserLoggedIn and UserLoginFailed operations in the UAL."
-    $SAMLData = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -Operations "UserLoggedIn","UserLoginFailed" -ResultSize 5000 -FreeText "16457" | Select-Object -ExpandProperty AuditData | Convertfrom-Json
-    #You can modify the resultant CSV output by changing the -CsvName parameter
-    #By default, it will show up as SAMLToken_Operations_Export.csv      
-    Export-UALData -ExportDir $ExportDir -UALInput $SAMLData -CsvName "SAMLToken_Operations_Export" -WorkloadType "AAD"
-
     #Searches for PowerShell logins into mailboxes
     Write-Verbose "Searching for PowerShell logins into mailboxes in the UAL."
     $PSMailboxData = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -ResultSize 5000 -Operations "MailboxLogin" -FreeText "Powershell" | Select-Object -ExpandProperty AuditData | Convertfrom-Json

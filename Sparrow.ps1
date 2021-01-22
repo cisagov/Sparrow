@@ -133,6 +133,9 @@ Function Get-UALData {
     #Calling on CloudConnect to connect to the tenant's Exchange Online environment via PowerShell
     Connect-ExchangeOnline -ExchangeEnvironmentName $ExchangeEnvironment
 
+    #Connecting to MSOnline
+    Connect-MsolService -AzureEnvironment $AzureEnvironment
+
     $LicenseQuestion = Read-Host 'Do you have an Office 365/Microsoft 365 E5/G5 license? Y/N'
     Switch ($LicenseQuestion){
         Y {$LicenseAnswer = "Yes"}
@@ -183,6 +186,21 @@ Function Get-UALData {
     #You can modify the resultant CSV output by changing the -CsvName parameter
     #By default, it will show up as Consent_Operations_Export.csv       
     Export-UALData -ExportDir $ExportDir -UALInput $ConsentData -CsvName "Consent_Operations_Export" -WorkloadType "AAD"
+
+    #Searches for SAML token usage anomaly (UserAuthenticationValue of 16457) in the Unified Audit 
+    $domains = Get-MsolDomain | where {$_.Authentication -eq "Federated"}
+    $domainsToFlag = $domains | %{ Get-MsolDomainFederationSettings -DomainName $_.Name | where {$_.SupportsMfa -ne $true}}
+    If ($null -ne $domainsToFlag)
+    {
+        Write-Verbose "Searching for 16457 in UserLoggedIn and UserLoginFailed operations in the UAL."
+        $SAMLData = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -Operations "UserLoggedIn","UserLoginFailed" -ResultSize 5000 -FreeText "16457" | Select-Object -ExpandProperty AuditData | Convertfrom-Json
+        $FilteredSAMLData = $SAMLData | Where-Object {$_.UserId -like "*$domainsToFlag*"}
+        #You can modify the resultant CSV output by changing the -CsvName parameter
+        #By default, it will show up as SAMLToken_Operations_Export.csv      
+        Export-UALData -ExportDir $ExportDir -UALInput $FilteredSAMLData -CsvName "SAMLToken_Operations_Export" -WorkloadType "AAD"
+    } else {
+        Write-Verbose "No federated domains found--16457 check will be skipped and no CSV will be produced."
+    }
 
     #Searches for PowerShell logins into mailboxes
     Write-Verbose "Searching for PowerShell logins into mailboxes in the UAL."

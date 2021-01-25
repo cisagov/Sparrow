@@ -187,9 +187,32 @@ Function Get-UALData {
     #By default, it will show up as Consent_Operations_Export.csv       
     Export-UALData -ExportDir $ExportDir -UALInput $ConsentData -CsvName "Consent_Operations_Export" -WorkloadType "AAD"
 
-    #Searches for SAML token usage anomaly (UserAuthenticationValue of 16457) in the Unified Audit 
-    $domains = Get-MsolDomain | where {$_.Authentication -eq "Federated"}
-    $domainsToFlag = $domains | %{ Get-MsolDomainFederationSettings -DomainName $_.Name | where {$_.SupportsMfa -ne $true}}
+  #Searches for SAML token usage anomaly (UserAuthenticationValue of 16457) in the Unified Audit
+  $federatedDomains = Get-MsolDomain | Where-Object {$_.Authentication -eq "Federated"}
+  # Get only root domains so we can get SupportMFA status
+  $rootDomains = $federatedDomains | Where-Object {$_.RootDomain -eq $null}
+  # Get root domains that don't support MFA, hence Federated MFA is not expected. Note: federated MFA is still possible when SupportsMFA is false, however less likely. Check your STS configuration.
+  $rootDomainsSupportMFAFalse = @()
+  
+  foreach ($rootDomain in $rootDomains)
+  {
+    $fedProps = Get-MsolDomainFederationSettings -DomainName $rootDomain.Name 
+    If ($fedProps.SupportsMfa -eq $False) {
+        $rootDomainsSupportMFAFalse += $rootDomain.Name
+    }
+  }
+# Add all child domains where its root is on the list
+$childDomainsSupportMFAFalse = @()
+$childDomains = $federatedDomains | Where-Object {$_.RootDomain -ne $null}
+
+foreach ($childDomain in $childDomains)
+{
+    if ($childDomain.RootDomain -in $rootDomainsSupportMFAFalse){
+        $childDomainsSupportMFAFalse += $childDomain.name
+    }
+}
+
+$domainsToFlag = $rootDomainsSupportMFAFalse + $childDomainsSupportMFAFalse
     If ($null -ne $domainsToFlag)
     {
         Write-Verbose "Searching for 16457 in UserLoggedIn and UserLoginFailed operations in the UAL."

@@ -133,6 +133,9 @@ Function Get-UALData {
     #Calling on CloudConnect to connect to the tenant's Exchange Online environment via PowerShell
     Connect-ExchangeOnline -ExchangeEnvironmentName $ExchangeEnvironment
 
+    #Connecting to MSOnline
+    Connect-MsolService -AzureEnvironment $AzureEnvironment
+
     $LicenseQuestion = Read-Host 'Do you have an Office 365/Microsoft 365 E5/G5 license? Y/N'
     Switch ($LicenseQuestion){
         Y {$LicenseAnswer = "Yes"}
@@ -184,12 +187,43 @@ Function Get-UALData {
     #By default, it will show up as Consent_Operations_Export.csv       
     Export-UALData -ExportDir $ExportDir -UALInput $ConsentData -CsvName "Consent_Operations_Export" -WorkloadType "AAD"
 
-    #Searches for SAML token usage anomaly (UserAuthenticationValue of 16457) in the Unified Audit Logs
-    Write-Verbose "Searching for 16457 in UserLoggedIn and UserLoginFailed operations in the UAL."
-    $SAMLData = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -Operations "UserLoggedIn","UserLoginFailed" -ResultSize 5000 -FreeText "16457" | Select-Object -ExpandProperty AuditData | Convertfrom-Json
-    #You can modify the resultant CSV output by changing the -CsvName parameter
-    #By default, it will show up as SAMLToken_Operations_Export.csv      
-    Export-UALData -ExportDir $ExportDir -UALInput $SAMLData -CsvName "SAMLToken_Operations_Export" -WorkloadType "AAD"
+    #Searches for SAML token usage anomaly (UserAuthenticationValue of 16457) in the Unified Audit
+    $federatedDomains = Get-MsolDomain | Where-Object {$_.Authentication -eq "Federated"}
+    # Get only root domains so we can get SupportMFA status
+    $rootDomains = $federatedDomains | Where-Object {$_.RootDomain -eq $null}
+    # Get root domains that don't support MFA, hence Federated MFA is not expected. Note: federated MFA is still possible when SupportsMFA is false, however less likely. Check your STS configuration.
+    $rootDomainsSupportMFAFalse = @()
+    
+    foreach ($rootDomain in $rootDomains)
+    {
+        $fedProps = Get-MsolDomainFederationSettings -DomainName $rootDomain.Name 
+        If ($fedProps.SupportsMfa -ne $True) {
+            $rootDomainsSupportMFAFalse += $rootDomain.Name
+        }
+    }
+    # Add all child domains where its root is on the list
+    $childDomainsSupportMFAFalse = @()
+    $childDomains = $federatedDomains | Where-Object {$_.RootDomain -ne $null}
+
+    foreach ($childDomain in $childDomains)
+    {
+        if ($childDomain.RootDomain -in $rootDomainsSupportMFAFalse){
+            $childDomainsSupportMFAFalse += $childDomain.name
+        }
+    }
+
+    $domainsToFlag = $rootDomainsSupportMFAFalse + $childDomainsSupportMFAFalse
+    If ($null -ne $domainsToFlag)
+    {
+        Write-Verbose "Searching for 16457 in UserLoggedIn and UserLoginFailed operations in the UAL."
+        $SAMLData = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -Operations "UserLoggedIn","UserLoginFailed" -ResultSize 5000 -FreeText "16457" | Select-Object -ExpandProperty AuditData | Convertfrom-Json
+        $FilteredSAMLData = $SAMLData | Where-Object {$_.UserId.Split('@')[1] -in $domainsToFlag}
+        #You can modify the resultant CSV output by changing the -CsvName parameter
+        #By default, it will show up as SAMLToken_Operations_Export.csv      
+        Export-UALData -ExportDir $ExportDir -UALInput $FilteredSAMLData -CsvName "SAMLToken_Operations_Export" -WorkloadType "AAD"
+    } else {
+        Write-Verbose "No federated domains found--16457 check will be skipped and no CSV will be produced."
+    }
 
     #Searches for PowerShell logins into mailboxes
     Write-Verbose "Searching for PowerShell logins into mailboxes in the UAL."

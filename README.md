@@ -24,6 +24,8 @@ The following AzureAD/m365 permissions are required to run Sparrow.ps1, and prov
 
 To check for the MailItemsAccessed Operation, your tenant organization requires an Office 365 or Microsoft 365 E5/G5 license.
 
+Unified Audit Logs will need to be enabled.
+
 ## Installation ##
 
 Sparrow.ps1 does not require any extra steps for installation once the permissions detailed in Requirements are satisfied.

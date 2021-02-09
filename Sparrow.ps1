@@ -10,6 +10,8 @@
     [Parameter()]
     [string] $ExportDir = (Join-Path ([Environment]::GetFolderPath("Desktop")) 'ExportDir'),
     [Parameter()]
+    [string] $InvestigationExportParentDir = (Join-Path ([Environment]::GetFolderPath("Desktop")) 'ExportDir\AppInvestigations'),
+    [Parameter()]
     [switch] $NoO365 = $false
 )
 
@@ -110,15 +112,10 @@ Function New-ExcelFromCsv() {
         $Workbook.Sheets[$ToDelete].Activate()
         $Workbook.Sheets[$ToDelete].Delete()
     }
+    $Workbook.Activate()
     $Workbook.SaveAs((Join-Path $ExportDir 'Summary_Export.xlsx'))
     $Excel.Quit()
 }
-
-
-<#Added in $Creds variable to eliminate multiple sign in prompts
-value gets set to $null at the end of the script #>
-$Creds = Get-credential
-
 
 Function Get-UALData {
 
@@ -133,47 +130,36 @@ Function Get-UALData {
         [string] $ExchangeEnvironment,
         [Parameter(Mandatory=$true)]
         [string] $ExportDir,
-        [Parameter(Mandatory=$false)]
-        [string] $Credential
+        [Parameter(Mandatory=$true)]
+        [string] $InvestigationExportParentDir
         )
-
-        
-    #Calling on CloudConnect to connect to the tenant's Exchange Online environment via PowerShell
-    Connect-ExchangeOnline -ExchangeEnvironmentName $ExchangeEnvironment -Credential $Creds
 
     $LicenseQuestion = Read-Host 'Do you have an Office 365/Microsoft 365 E5/G5 license? Y/N'
     Switch ($LicenseQuestion){
         Y {$LicenseAnswer = "Yes"}
         N {$LicenseAnswer = "No"}
     }
-    $AppIdQuestion = Read-Host 'Would you like to investigate a certain application? Y/N'
+    $AppIdQuestion = Read-Host 'Would you like to investigate one application, all applications, or skip application investigation? One/All/Skip'
     Switch ($AppIdQuestion){
-        Y {$AppIdInvestigation = "Yes"}
-        N {$AppIdInvestigation = "No"}
+        One {$AppIdInvestigation = "Single"}
+        All {$AppIdInvestigation = "All"}
+        Skip {$AppIdInvestigation = "Skip"}
     }
     
-    If ($AppIdInvestigation -eq "Yes"){
+    If ($AppIdInvestigation -eq "Single"){
         $SusAppId = Read-Host "Enter the application's AppID to investigate"
-        Connect-AzureAD -AzureEnvironmentName $AzureEnvironment -Credential $Creds
-        $AzureAppIds=Get-AzureADApplication -All
+        If (!(Test-Path $InvestigationExportParentDir)){
+            New-Item -Path $InvestigationExportParentDir -ItemType "Directory" -Force
+        }
+    } ElseIf ($AppIdInvestigation -eq "All"){
+        Write-Host "Gathering Azure Application IDs..."
+        $AzureAppIds = Get-AzureADServicePrincipal -All $true | Where-Object {$_.ServicePrincipalType -eq "Application"}
+        Write-Host "Total number of Azure Application IDs: " $AzureAppIds.Count
+        If (!(Test-Path $InvestigationExportParentDir)){
+            New-Item -Path $InvestigationExportParentDir -ItemType "Directory" -Force
+        }
     } Else{
-        Write-Host "Skipping AppID investigation"
-    }
-
-     if ($AppIdInvestigation -eq "No")
-    {
-    $AppIdQuestion_GetAll = Read-Host 'Would you like to investigate all applications? This may take some time... Y/N'
-    Switch ($AppIdQuestion_GetAll){
-        Y {$AppIdQuestion_GetAll = "Yes"}
-        N {$AppIdQuestion_GetAll = "No"}
-    }
-    If ($AppIdQuestion_GetAll -eq "Yes"){
-        write-Host "Gathering Azure Application IDs..."
-        Connect-AzureAD -AzureEnvironmentName $AzureEnvironment -Credential $Creds
-        $AzureAppIds=Get-AzureADServicePrincipal -All $true | Where-Object {$_.ServicePrincipalType -eq "Application"}
-    } Else{
-        Write-Host "Skipping Full AppID investigation"
-    }
+        Write-Host "Skipping application investigation."
     }
    
     #Searches for any modifications to the domain and federation settings on a tenant's domain
@@ -211,12 +197,43 @@ Function Get-UALData {
     #By default, it will show up as Consent_Operations_Export.csv       
     Export-UALData -ExportDir $ExportDir -UALInput $ConsentData -CsvName "Consent_Operations_Export" -WorkloadType "AAD"
 
-    #Searches for SAML token usage anomaly (UserAuthenticationValue of 16457) in the Unified Audit Logs
-    Write-Verbose "Searching for 16457 in UserLoggedIn and UserLoginFailed operations in the UAL."
-    $SAMLData = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -Operations "UserLoggedIn","UserLoginFailed" -ResultSize 5000 -FreeText "16457" | Select-Object -ExpandProperty AuditData | Convertfrom-Json
-    #You can modify the resultant CSV output by changing the -CsvName parameter
-    #By default, it will show up as SAMLToken_Operations_Export.csv      
-    Export-UALData -ExportDir $ExportDir -UALInput $SAMLData -CsvName "SAMLToken_Operations_Export" -WorkloadType "AAD"
+    #Searches for SAML token usage anomaly (UserAuthenticationValue of 16457) in the Unified Audit
+    $federatedDomains = Get-MsolDomain | Where-Object {$_.Authentication -eq "Federated"}
+    # Get only root domains so we can get SupportMFA status
+    $rootDomains = $federatedDomains | Where-Object {$_.RootDomain -eq $null}
+    # Get root domains that don't support MFA, hence Federated MFA is not expected. Note: federated MFA is still possible when SupportsMFA is false, however less likely. Check your STS configuration.
+    $rootDomainsSupportMFAFalse = @()
+    
+    foreach ($rootDomain in $rootDomains)
+    {
+        $fedProps = Get-MsolDomainFederationSettings -DomainName $rootDomain.Name 
+        If ($fedProps.SupportsMfa -ne $True) {
+            $rootDomainsSupportMFAFalse += $rootDomain.Name
+        }
+    }
+    # Add all child domains where its root is on the list
+    $childDomainsSupportMFAFalse = @()
+    $childDomains = $federatedDomains | Where-Object {$_.RootDomain -ne $null}
+
+    foreach ($childDomain in $childDomains)
+    {
+        if ($childDomain.RootDomain -in $rootDomainsSupportMFAFalse){
+            $childDomainsSupportMFAFalse += $childDomain.name
+        }
+    }
+
+    $domainsToFlag = $rootDomainsSupportMFAFalse + $childDomainsSupportMFAFalse
+    If ($null -ne $domainsToFlag)
+    {
+        Write-Verbose "Searching for 16457 in UserLoggedIn and UserLoginFailed operations in the UAL."
+        $SAMLData = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -Operations "UserLoggedIn","UserLoginFailed" -ResultSize 5000 -FreeText "16457" | Select-Object -ExpandProperty AuditData | Convertfrom-Json
+        $FilteredSAMLData = $SAMLData | Where-Object {$_.UserId.Split('@')[1] -in $domainsToFlag}
+        #You can modify the resultant CSV output by changing the -CsvName parameter
+        #By default, it will show up as SAMLToken_Operations_Export.csv      
+        Export-UALData -ExportDir $ExportDir -UALInput $FilteredSAMLData -CsvName "SAMLToken_Operations_Export" -WorkloadType "AAD"
+    } else {
+        Write-Verbose "No federated domains found--16457 check will be skipped and no CSV will be produced."
+    }
 
     #Searches for PowerShell logins into mailboxes
     Write-Verbose "Searching for PowerShell logins into mailboxes in the UAL."
@@ -246,17 +263,20 @@ Function Get-UALData {
     #By default, it will show up as part of the PSLogin_Operations_Export.csv 
     Export-UALData -ExportDir $ExportDir -UALInput $PSLoginData3 -CsvName "PSLogin_Operations_Export" -WorkloadType "AAD" -AppendType "Append"
 
-    If ($AppIdInvestigation -eq "Yes"){
+    If ($AppIdInvestigation -eq "Single"){
         If ($LicenseAnswer -eq "Yes"){
-
-           
             #Searches for the AppID to see if it accessed mail items.
             Write-Verbose "Searching for $SusAppId in the MailItemsAccessed operation in the UAL."
             $SusMailItems = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -Operations "MailItemsAccessed" -ResultSize 5000 -FreeText $SusAppId -Verbose | Select-Object -ExpandProperty AuditData | Convertfrom-Json
             #You can modify the resultant CSV output by changing the -CsvName parameter
-            #By default, it will show up as MailItems_Operations_Export.csv  
-            Export-UALData -ExportDir $ExportDir -UALInput $SusMailItems -CsvName "MailItems_Operations_Export" -WorkloadType "EXO"
-        } else {
+            #By default, it will show up as MailItems_Operations_Export.csv 
+            If ($null -ne $SusMailItems){
+                #Determines if the AppInvestigation sub-directory by displayname path exists, and if not, creates that path
+                Export-UALData -ExportDir $InvestigationExportParentDir -UALInput $SusMailItems -CsvName "MailItems_Operations_Export" -WorkloadType "EXO"
+            } Else{
+                Write-Verbose "No MailItemsAccessed data returned for $($SusAppId) and no CSV will be produced."
+            }            
+        } Else{
             Write-Host "MailItemsAccessed query will be skipped as it is not present without an E5/G5 license."
         }
 
@@ -265,63 +285,56 @@ Function Get-UALData {
         $SusFileItems = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -Operations "FileAccessed","FileAccessedExtended" -ResultSize 5000 -FreeText $SusAppId -Verbose | Select-Object -ExpandProperty AuditData | Convertfrom-Json
         #You can modify the resultant CSV output by changing the -CsvName parameter
         #By default, it will show up as FileItems_Operations_Export.csv  
-        Export-UALData -ExportDir $ExportDir -UALInput $SusFileItems -CsvName "FileItems_Operations_Export" -WorkloadType "SharePoint"
-    }
-
-    <#Determines if Investigation of all Azure AppIds of type Application was requested
-    If true, and E5 license entitlement is yes, create a new sub-directory in $ExportDir, for AppInvestigations
-    This new directory becomes parent directory for AppId investigation results. Each child directory will have the name of the Displayname of the Ap, and the results
-    contained within will have the AppId in the title of the csv, to make identififcation easier. Also allows multiple results to co-exist in directory if moved later on.
-    #>
-    If ($AppIdQuestion_GetAll -eq "Yes"){
-    If ($LicenseAnswer -eq "Yes"){
-        $InvestigationExportParentDir=(Get-Item -Path $ExportDir).FullName+"\AppInvestigations"
-        #Determines if the AppInvestigations path exists, and if not, creates that path
-        if (!(test-path $InvestigationExportParentDir))
-        {
-            New-Item -ItemType Directory -Path $InvestigationExportParentDir -Force
-        
+        If ($null -ne $SusFileItems){
+            Export-UALData -ExportDir $InvestigationExportParentDir -UALInput $SusFileItems -CsvName "FileItems_Operations_Export" -WorkloadType "SharePoint"
+        } Else{
+            Write-Verbose "No FileItems data returned for $($SusAppId) and no CSV will be produced."
         }
-            foreach ($AzureAppId in $AzureAppIds)
-            {
-            $DirName=$AzureAppId.DisplayName
-            $InvestigationMailExportDir=(Get-Item -Path $InvestigationExportParentDir).FullName+"\$DirName"
-
-            #Determines if the AppInvestigation sub-directory by displayname path exists, and if not, creates that path
-            if (!(test-path $InvestigationMailExportDir))
-            {
-                new-item -Type Directory -Path $InvestigationMailExportDir -Force
+    } ElseIf ($AppIdInvestigation -eq "All"){
+        <#For a comprehensive application investigation:
+        Each child directory will have the name of the display name of the application, and the results will be contained within these folders, and will have the AppId in the title of the csv to make identififcation easier. Also allows multiple results to co-exist in directory if moved later on.
+        #>
+        If ($LicenseAnswer -eq "Yes"){
+            ForEach ($AzureAppId in $AzureAppIds){
+                $DirName = $AzureAppId.DisplayName
+                $InvestigationMailExportDir = (Get-Item -Path $InvestigationExportParentDir).FullName+"\$DirName"    
+                #Searches for the AppID to see if it accessed mail items.
+                Write-Verbose "Searching for $($AzureAppId.AppId) in the MailItemsAccessed operation in the UAL."
+                $SusMailItems = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -Operations "MailItemsAccessed" -ResultSize 5000 -FreeText $($AzureAppId.AppId) -Verbose | Select-Object -ExpandProperty AuditData | Convertfrom-Json
+                #You can modify the resultant CSV output by changing the -CsvName parameter
+                #By default, it will show up as MailItems_Operations_Export.csv 
+                If ($null -ne $SusMailItems){
+                    #Determines if the AppInvestigation sub-directory by displayname path exists, and if not, creates that path
+                    If (!(Test-Path $InvestigationMailExportDir)){
+                        new-item -Type Directory -Path $InvestigationMailExportDir -Force
+                    }
+                    Export-UALData -ExportDir $InvestigationMailExportDir -UALInput $SusMailItems -CsvName "MailItems_Operations_Export.$($AzureAppId.AppId)" -WorkloadType "EXO"
+                } Else{
+                    Write-Verbose "No data returned for $($AzureAppId.AppId) and no CSV will be produced."
+                }
             }
-            
-            #Searches for the AppID to see if it accessed mail items.
-            Write-Verbose "Searching for $($AzureAppId.AppId) in the MailItemsAccessed operation in the UAL."
-            $SusMailItems = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -Operations "MailItemsAccessed" -ResultSize 5000 -FreeText $($AzureAppId.AppId) -Verbose | Select-Object -ExpandProperty AuditData | Convertfrom-Json
-            #You can modify the resultant CSV output by changing the -CsvName parameter
-            #By default, it will show up as MailItems_Operations_Export.csv  
-            Export-UALData -ExportDir $InvestigationMailExportDir -UALInput $SusMailItems -CsvName "MailItems_Operations_Export.$($AzureAppId.AppId)" -WorkloadType "EXO"
-            }
-            }
-        } else {
+        } Else{
             Write-Host "MailItemsAccessed query will be skipped as it is not present without an E5/G5 license."
         }
-         foreach ($AzureAppId in $AzureAppIds)
-            {
+        ForEach ($AzureAppId in $AzureAppIds){
+            #Determines if the AppInvestigation sub-directory by displayname path exists, and if not, creates that path
             $DirName=$AzureAppId.DisplayName
             $InvestigationFileExportDir=(Get-Item -Path $InvestigationExportParentDir).FullName+"\$DirName"
-            #Determines if the AppInvestigation sub-directory by displayname path exists, and if not, creates that path
-            #This should always return true, as the detection/creation is handled in the previous section, but best to have detection in place.
-            if (!(test-path $InvestigationFileExportDir))
-            {
-                new-item -Type Directory -Path $InvestigationFileExportDir -Force
+            #Searches for the AppID to see if it accessed SharePoint or OneDrive items
+            Write-Verbose "Searching for $($AzureAppId.AppId) in the FileAccessed and FileAccessedExtended operations in the UAL."
+            $SusFileItems = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -Operations "FileAccessed","FileAccessedExtended" -ResultSize 5000 -FreeText $($AzureAppId.AppId) -Verbose | Select-Object -ExpandProperty AuditData | Convertfrom-Json
+            #You can modify the resultant CSV output by changing the -CsvName parameter
+            #By default, it will show up as FileItems_Operations_Export.csv  
+            If ($null -ne $SusFileItems){
+                If (!(test-path $InvestigationFileExportDir)){
+                    new-item -Type Directory -Path $InvestigationFileExportDir -Force
+                }
+                Export-UALData -ExportDir $InvestigationFileExportDir -UALInput $SusFileItems -CsvName "FileItems_Operations_Export.$($AzureAppId.AppId)" -WorkloadType "SharePoint"
+            } Else{
+                Write-Verbose "No data returned for $($AzureAppId.AppId) and no CSV will be produced."
             }
-            
-        #Searches for the AppID to see if it accessed SharePoint or OneDrive items
-        Write-Verbose "Searching for $($AzureAppId.AppId) in the FileAccessed and FileAccessedExtended operations in the UAL."
-        $SusFileItems = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -Operations "FileAccessed","FileAccessedExtended" -ResultSize 5000 -FreeText $($AzureAppId.AppId) -Verbose | Select-Object -ExpandProperty AuditData | Convertfrom-Json
-        #You can modify the resultant CSV output by changing the -CsvName parameter
-        #By default, it will show up as FileItems_Operations_Export.csv  
-        Export-UALData -ExportDir $InvestigationFileExportDir -UALInput $SusFileItems -CsvName "FileItems_Operations_Export.$($AzureAppId.AppId)" -WorkloadType "SharePoint"
         }
+    }
 }
 
 Function Get-AzureDomains{
@@ -330,14 +343,8 @@ Function Get-AzureDomains{
         [Parameter(Mandatory=$true)]
         [string] $AzureEnvironment,
         [Parameter(Mandatory=$true)]
-        [string] $ExportDir,
-        [Parameter(Mandatory=$false)]
-        [string] $Credential
-        
+        [string] $ExportDir
         )
-
-    #Connect to AzureAD
-    Connect-AzureAD -AzureEnvironmentName $AzureEnvironment -Credential $Creds
 
     $DomainData = Get-AzureADDomain
     $DomainArr = @()
@@ -368,13 +375,8 @@ Function Get-AzureSPAppRoles{
         [Parameter(Mandatory=$true)]
         [string] $AzureEnvironment,
         [Parameter(Mandatory=$true)]
-        [string] $ExportDir,
-        [Parameter(Mandatory=$false)]
-        [string] $Credential
+        [string] $ExportDir
         )
-
-    #Connect to your tenant's AzureAD environment
-    Connect-AzureAD -AzureEnvironmentName $AzureEnvironment -Credential $Creds
 
     #Retrieve all service principals that are applications
     $SPArr = Get-AzureADServicePrincipal -All $true | Where-Object {$_.ServicePrincipalType -eq "Application"}
@@ -574,10 +576,15 @@ Function Export-UALData {
 #Function calls, if you do not need a particular check, you can comment it out below with #
 Import-PSModules -ExportDir $ExportDir -Verbose
 ($AzureEnvironment, $ExchangeEnvironment) = Get-AzureEnvironments -AzureEnvironment $AzureEnvironment -ExchangeEnvironment $ExchangeEnvironment
+#Calling on CloudConnect to connect to the tenant's Exchange Online environment via PowerShell
+Connect-ExchangeOnline -ExchangeEnvironmentName $ExchangeEnvironment
+#Connecting to MSOnline
+Connect-MsolService -AzureEnvironment $AzureEnvironment
+#Connect to your tenant's AzureAD environment
+Connect-AzureAD -AzureEnvironmentName $AzureEnvironment
 If ($($ExchangeEnvironment -ne "None") -and $($NoO365 -eq $false)) {
-    Get-UALData -Credential $Creds -ExportDir $ExportDir -StartDate $StartDate -EndDate $EndDate -ExchangeEnvironment $ExchangeEnvironment -AzureEnvironment $AzureEnvironment -Verbose
-} 
-Get-AzureDomains  -AzureEnvironment $AzureEnvironment -Credential $Creds  -ExportDir $ExportDir -Verbose
-Get-AzureSPAppRoles -AzureEnvironment $AzureEnvironment -Credential $Creds  -ExportDir $ExportDir -Verbose
+    Get-UALData -ExportDir $ExportDir -InvestigationExportParentDir $InvestigationExportParentDir -StartDate $StartDate -EndDate $EndDate -ExchangeEnvironment $ExchangeEnvironment -AzureEnvironment $AzureEnvironment -Verbose
+}
+Get-AzureDomains  -AzureEnvironment $AzureEnvironment -ExportDir $ExportDir -Verbose
+Get-AzureSPAppRoles -AzureEnvironment $AzureEnvironment -ExportDir $ExportDir -Verbose
 New-ExcelFromCsv -ExportDir $ExportDir
-$Creds = $null

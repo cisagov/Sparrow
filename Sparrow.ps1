@@ -132,7 +132,7 @@ Function Get-UALData {
         [string] $ExchangeEnvironment,
         [Parameter(Mandatory=$true)]
         [string] $ExportDir,
-        [Parameter(Mandatory=$true)
+        [Parameter(Mandatory=$true)]
         [string] $InvestigationExportParentDir,
         [Parameter(Mandatory=$true)]
         [string] $Delimiter

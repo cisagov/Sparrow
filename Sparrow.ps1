@@ -532,6 +532,7 @@ Function Export-UALData {
                     SupportTicketId = $Data.SupportTicketId
                     Target = ($Data.Target | ConvertTo-Json -Compress | Out-String).Trim()
                     TargetContextId = $Data.TargetContextId
+                    ApplicationId = $Data.ApplicationId
                 }
                 $DataObj = New-Object -TypeName PSObject -Property $DataProps
                 $DataArr += $DataObj           

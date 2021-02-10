@@ -169,37 +169,57 @@ Function Get-UALData {
     #Searches for any modifications to the domain and federation settings on a tenant's domain
     Write-Verbose "Searching for 'Set domain authentication' and 'Set federation settings on domain' operations in the UAL."
     $DomainData = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -RecordType AzureActiveDirectory -Operations "Set domain authentication","Set federation settings on domain" -ResultSize 5000 | Select-Object -ExpandProperty AuditData | Convertfrom-Json
-    #You can modify the resultant CSV output by changing the -CsvName parameter
-    #By default, it will show up as Domain_Operations_Export.csv
-    Export-UALData -ExportDir $ExportDir -UALInput $DomainData -CsvName "Domain_Operations_Export" -WorkloadType "AAD" -Delimiter $Delimiter
+    If ($null -ne $DomainData){
+        #You can modify the resultant CSV output by changing the -CsvName parameter
+        #By default, it will show up as Domain_Operations_Export.csv
+        Export-UALData -ExportDir $ExportDir -UALInput $DomainData -CsvName "Domain_Operations_Export" -WorkloadType "AAD" -Delimiter $Delimiter
+    } Else{
+        Write-Verbose "No 'Set domain authentication' and 'Set federation settings on domain' data returned and no CSV will be produced."
+    }    
 
     #Searches for any modifications or credential modifications to an application
     Write-Verbose "Searching for 'Update application' and 'Update application ? Certificates and secrets management' in the UAL."
     $AppData = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -RecordType AzureActiveDirectory -Operations "Update application","Update application ? Certificates and secrets management" -ResultSize 5000 | Select-Object -ExpandProperty AuditData | Convertfrom-Json
-    #You can modify the resultant CSV output by changing the -CsvName parameter
-    #By default, it will show up as AppUpdate_Operations_Export.csv
-    Export-UALData -ExportDir $ExportDir -UALInput $AppData -CsvName "AppUpdate_Operations_Export" -WorkloadType "AAD" -Delimiter $Delimiter
+    If ($null -ne $AppData){
+        #You can modify the resultant CSV output by changing the -CsvName parameter
+        #By default, it will show up as AppUpdate_Operations_Export.csv
+        Export-UALData -ExportDir $ExportDir -UALInput $AppData -CsvName "AppUpdate_Operations_Export" -WorkloadType "AAD" -Delimiter $Delimiter
+    } Else{
+        Write-Verbose "No 'Update application' and 'Update application ? Certificates and secrets management' data returned and no CSV will be produced."
+    }   
 
     #Searches for any modifications or credential modifications to a service principal
     Write-Verbose "Searching for 'Update service principal' and 'Add service principal credentials' in the UAL."
     $SpData = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -RecordType AzureActiveDirectory -Operations "Update service principal","Add service principal credentials" -ResultSize 5000 | Select-Object -ExpandProperty AuditData | Convertfrom-Json
-    #You can modify the resultant CSV output by changing the -CsvName parameter
-    #By default, it will show up as ServicePrincipal_Operations_Export.csv   
-    Export-UALData -ExportDir $ExportDir -UALInput $SpData -CsvName "ServicePrincipal_Operations_Export" -WorkloadType "AAD" -Delimiter $Delimiter
+    If ($null -ne $SpData){
+        #You can modify the resultant CSV output by changing the -CsvName parameter
+        #By default, it will show up as ServicePrincipal_Operations_Export.csv   
+        Export-UALData -ExportDir $ExportDir -UALInput $SpData -CsvName "ServicePrincipal_Operations_Export" -WorkloadType "AAD" -Delimiter $Delimiter
+    } Else{
+        Write-Verbose "No 'Update service principal' and 'Add service principal credentials' data returned and no CSV will be produced."
+    }   
 
     #Searches for any app role assignments to service principals, users, and groups
     Write-Verbose "Searching for 'Add app role assignment to service principal', 'Add app role assignment grant to user', and 'Add app role assignment to group' in the UAL."
     $AppRoleData = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -RecordType AzureActiveDirectory -Operations "Add app role assignment" -ResultSize 5000 | Select-Object -ExpandProperty AuditData | Convertfrom-Json
-    #You can modify the resultant CSV output by changing the -CsvName parameter
-    #By default, it will show up as AppRoleAssignment_Operations_Export.csv      
-    Export-UALData -ExportDir $ExportDir -UALInput $AppRoleData -CsvName "AppRoleAssignment_Operations_Export" -WorkloadType "AAD" -Delimiter $Delimiter
+    If ($null -ne $AppRoleData){
+        #You can modify the resultant CSV output by changing the -CsvName parameter
+        #By default, it will show up as AppRoleAssignment_Operations_Export.csv      
+        Export-UALData -ExportDir $ExportDir -UALInput $AppRoleData -CsvName "AppRoleAssignment_Operations_Export" -WorkloadType "AAD" -Delimiter $Delimiter
+    } Else{
+        Write-Verbose "No 'Add app role assignment to service principal', 'Add app role assignment grant to user', and 'Add app role assignment to group' data returned and no CSV will be produced."
+    }  
 
     #Searches for any OAuth or application consents
     Write-Verbose "Searching for 'Add OAuth2PermissionGrant' and 'Consent to application' in the UAL."
     $ConsentData = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -RecordType AzureActiveDirectory -Operations "Add OAuth2PermissionGrant","Consent to application" -ResultSize 5000 | Select-Object -ExpandProperty AuditData | Convertfrom-Json
-    #You can modify the resultant CSV output by changing the -CsvName parameter
-    #By default, it will show up as Consent_Operations_Export.csv       
-    Export-UALData -ExportDir $ExportDir -UALInput $ConsentData -CsvName "Consent_Operations_Export" -WorkloadType "AAD" -Delimiter $Delimiter
+    If ($null -ne $ConsentData){
+        #You can modify the resultant CSV output by changing the -CsvName parameter
+        #By default, it will show up as Consent_Operations_Export.csv       
+        Export-UALData -ExportDir $ExportDir -UALInput $ConsentData -CsvName "Consent_Operations_Export" -WorkloadType "AAD" -Delimiter $Delimiter
+    } Else{
+        Write-Verbose "No 'Add app role assignment to service principal', 'Add app role assignment grant to user', and 'Add app role assignment to group' data returned and no CSV will be produced."
+    }  
 
     #Searches for SAML token usage anomaly (UserAuthenticationValue of 16457) in the Unified Audit
     $federatedDomains = Get-MsolDomain | Where-Object {$_.Authentication -eq "Federated"}
@@ -252,14 +272,18 @@ Function Get-UALData {
     }
 
     $domainsToFlag = $rootDomainsSupportMFAFalse + $childDomainsSupportMFAFalse
-    If ($null -ne $domainsToFlag)
+    If ($null -ne $domainsToFlag -and @($domainsToFlag).count -gt 0)
     {
         Write-Verbose "Searching for 16457 in UserLoggedIn and UserLoginFailed operations in the UAL."
         $SAMLData = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -Operations "UserLoggedIn","UserLoginFailed" -ResultSize 5000 -FreeText "16457" | Select-Object -ExpandProperty AuditData | Convertfrom-Json
         $FilteredSAMLData = $SAMLData | Where-Object {$_.UserId.Split('@')[1] -in $domainsToFlag}
         #You can modify the resultant CSV output by changing the -CsvName parameter
         #By default, it will show up as SAMLToken_Operations_Export.csv      
-        Export-UALData -ExportDir $ExportDir -UALInput $FilteredSAMLData -CsvName "SAMLToken_Operations_Export" -WorkloadType "AAD" -Delimiter $Delimiter
+        If ($null -ne $FilteredSAMLData){
+            Export-UALData -ExportDir $ExportDir -UALInput $FilteredSAMLData -CsvName "SAMLToken_Operations_Export" -WorkloadType "AAD" -Delimiter $Delimiter
+        } Else{
+            Write-Verbose "No '16457' data returned and no CSV will be produced."
+        }
     } else {
         Write-Verbose "No federated domains found--16457 check will be skipped and no CSV will be produced."
     }
@@ -267,30 +291,46 @@ Function Get-UALData {
     #Searches for PowerShell logins into mailboxes
     Write-Verbose "Searching for PowerShell logins into mailboxes in the UAL."
     $PSMailboxData = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -ResultSize 5000 -Operations "MailboxLogin" -FreeText "Powershell" | Select-Object -ExpandProperty AuditData | Convertfrom-Json
-    #You can modify the resultant CSV output by changing the -CsvName parameter
-    #By default, it will show up as PSMailbox_Operations_Export.csv      
-    Export-UALData -ExportDir $ExportDir -UALInput $PSMailboxData -CsvName "PSMailbox_Operations_Export" -WorkloadType "EXO2" -Delimiter $Delimiter
+    If ($null -ne $PSMailboxData){
+        #You can modify the resultant CSV output by changing the -CsvName parameter
+        #By default, it will show up as PSMailbox_Operations_Export.csv      
+        Export-UALData -ExportDir $ExportDir -UALInput $PSMailboxData -CsvName "PSMailbox_Operations_Export" -WorkloadType "EXO2" -Delimiter $Delimiter
+    } Else{
+        Write-Verbose "No 'PowerShell logins into mailboxes' data returned and no CSV will be produced."
+    }  
 
     #Searches for well-known AppID for Exchange Online PowerShell
     Write-Verbose "Searching for PowerShell logins using known PS application ids in the UAL."
     $PSLoginData1 = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -ResultSize 5000  -FreeText "a0c73c16-a7e3-4564-9a95-2bdf47383716" | Select-Object -ExpandProperty AuditData | Convertfrom-Json
-    #You can modify the resultant CSV output by changing the -CsvName parameter
-    #By default, it will show up as PSLogin_Operations_Export.csv  
-    Export-UALData -ExportDir $ExportDir -UALInput $PSLoginData1 -CsvName "PSLogin_Operations_Export" -WorkloadType "AAD" -Delimiter $Delimiter
+    If ($null -ne $PSLoginData1){
+        #You can modify the resultant CSV output by changing the -CsvName parameter
+        #By default, it will show up as PSLogin_Operations_Export.csv  
+        Export-UALData -ExportDir $ExportDir -UALInput $PSLoginData1 -CsvName "PSLogin_Operations_Export" -WorkloadType "AAD" -Delimiter $Delimiter
+    } Else{
+        Write-Verbose "No 'a0c73c16-a7e3-4564-9a95-2bdf47383716' data returned and no data will be appended to the CSV."
+    }  
 
     #Searches for well-known AppID for PowerShell
     $PSLoginData2 = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -ResultSize 5000  -FreeText "1b730954-1685-4b74-9bfd-dac224a7b894" | Select-Object -ExpandProperty AuditData | Convertfrom-Json
-    #The resultant CSV will be appended with the $PSLoginData* resultant CSV.
-    #If you want a separate CSV with a different name, remove the -AppendType parameter (-AppendType "Append")
-    #By default, it will show up as part of the PSLogin_Operations_Export.csv  
-    Export-UALData -ExportDir $ExportDir -UALInput $PSLoginData2 -CsvName "PSLogin_Operations_Export" -WorkloadType "AAD" -AppendType "Append" -Delimiter $Delimiter
+    If ($null -ne $PSLoginData2){
+        #The resultant CSV will be appended with the $PSLoginData* resultant CSV.
+        #If you want a separate CSV with a different name, remove the -AppendType parameter (-AppendType "Append")
+        #By default, it will show up as part of the PSLogin_Operations_Export.csv  
+        Export-UALData -ExportDir $ExportDir -UALInput $PSLoginData2 -CsvName "PSLogin_Operations_Export" -WorkloadType "AAD" -AppendType "Append" -Delimiter $Delimiter
+    } Else{
+        Write-Verbose "No '1b730954-1685-4b74-9bfd-dac224a7b894' data returned and no data will be appended to the CSV."
+    }  
 
     #Searches for WinRM useragent string in the user logged in and user login failed operations
     $PSLoginData3 = Search-UnifiedAuditLog -StartDate $StartDate -EndDate $EndDate -ResultSize 5000 -Operations "UserLoggedIn","UserLoginFailed" -FreeText "WinRM" | Select-Object -ExpandProperty AuditData | Convertfrom-Json
-    #The resultant CSV will be appended with the $PSLoginData* resultant CSV.
-    #If you want a separate CSV with a different name, remove the -AppendType parameter (-AppendType "Append")
-    #By default, it will show up as part of the PSLogin_Operations_Export.csv 
-    Export-UALData -ExportDir $ExportDir -UALInput $PSLoginData3 -CsvName "PSLogin_Operations_Export" -WorkloadType "AAD" -AppendType "Append" -Delimiter $Delimiter
+    If ($null -ne $PSLoginData3){
+        #The resultant CSV will be appended with the $PSLoginData* resultant CSV.
+        #If you want a separate CSV with a different name, remove the -AppendType parameter (-AppendType "Append")
+        #By default, it will show up as part of the PSLogin_Operations_Export.csv 
+        Export-UALData -ExportDir $ExportDir -UALInput $PSLoginData3 -CsvName "PSLogin_Operations_Export" -WorkloadType "AAD" -AppendType "Append" -Delimiter $Delimiter
+    } Else{
+        Write-Verbose "No 'WinRM' data returned and no data will be appended to the CSV."
+    }  
 
     If ($AppIdInvestigation -eq "Single"){
         If ($LicenseAnswer -eq "Yes"){

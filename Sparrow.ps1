@@ -115,7 +115,13 @@ Function New-ExcelFromCsv() {
         $Workbook.Sheets[$ToDelete].Delete()
     }
     $Workbook.Activate()
-    $Workbook.SaveAs((Join-Path $ExportDir 'Summary_Export.xlsx'))
+    Try{
+        $Workbook.SaveAs((Join-Path $ExportDir 'Summary_Export.xlsx'))
+    } Catch{
+        Write-Warning "An error has occurred. No combined .xlsx will be produced."
+        Write-Warning "The csvs remain in the default export directory."
+    }
+    
     $Excel.Quit()
 }
 

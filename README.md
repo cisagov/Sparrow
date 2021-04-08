@@ -1,10 +1,16 @@
+# Aviary
+
+Aviary is a new dashboard that CISA and partners developed to help visualize and analyze outputs from its Sparrow detection tool released in December 2020. Sparrow helps network defenders detect possible compromised accounts and applications in Azure/Microsoft O365 environments. CISA created Sparrow to support hunts for threat activity following the SolarWinds compromise. Aviary--a Splunk-base dashboard--facilitates analysis of Sparrow data outputs.
+
+To download Aviary, visit [releases.](https://github.com/cisagov/Sparrow/releases/)
+
 # Sparrow.ps1 #
 
 Sparrow.ps1 was created by CISA's Cloud Forensics team to help detect possible compromised accounts and applications in the Azure/m365 environment. The tool is intended for use by incident responders, and focuses on the narrow scope of user and application activity endemic to identity and authentication based attacks seen recently in multiple sectors. It is neither comprehensive nor exhaustive of available data, and is intended to narrow a larger set of available investigation modules and telemetry to those specific to recent attacks on federated identity sources and applications.
  
 Sparrow.ps1 will check and install the required PowerShell modules on the analysis machine, check the unified audit log in Azure/M365 for certain indicators of compromise (IoC's), list Azure AD domains, and check Azure service principals and their Microsoft Graph API permissions to identify potential malicious activity. The tool then outputs the data into multiple CSV files that are located in the user's default home directory in a folder called 'ExportDir' (ie: Desktop/ExportDir).
 
-For more guidance on how to use Sparrow, please see: https://us-cert.cisa.gov/ncas/alerts/aa21-008a
+For more guidance on how to use Sparrow and Aviary, please see: https://us-cert.cisa.gov/ncas/alerts/aa21-008a
 
 ## Requirements ##
 

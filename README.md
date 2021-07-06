@@ -36,7 +36,7 @@ Unified Audit Logs will need to be enabled.
 
 Sparrow.ps1 does not require any extra steps for installation once the permissions detailed in Requirements are satisfied.
 
-The function, Check-PSModules, will check to see if the three required PowerShell modules are installed on the system and if not, it will use the default PowerShell repository on the system to reach out and install. If the modules are present but not imported, the script will also import the missing modules so that they are ready for use.
+The function, Import-PSModules, will check to see if the three required PowerShell modules are installed on the system and if not, it will use the default PowerShell repository on the system to reach out and install. If the modules are present but not imported, the script will also import the missing modules so that they are ready for use.
 
 The required PowerShell modules:
 

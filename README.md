@@ -1,3 +1,5 @@
+This repo is archived as of 21 Dec 2022 - and is no longer being maintained.
+
 # Aviary
 
 Aviary is a new dashboard that CISA and partners developed to help visualize and analyze outputs from its Sparrow detection tool released in December 2020. Sparrow helps network defenders detect possible compromised accounts and applications in Azure/Microsoft O365 environments. CISA created Sparrow to support hunts for threat activity following the SolarWinds compromise. Aviary--a Splunk-base dashboard--facilitates analysis of Sparrow data outputs.

@@ -1,4 +1,4 @@
-This repo is archived as of 21 Dec 2022 - and is no longer being maintained.
+This repo is archived as of 27 Dec 2022 - and is no longer being maintained.
 
 # Aviary
 
